@@ -86,12 +86,16 @@ class Worker(MaiBoxMixIn, SocketMixIn, gevent.Greenlet):
     def receive(self, message, tp):
         raise NotImplemented
 
+    @property
+    def sign(self):
+        return self
+
     def _run(self):
         recv = gevent.spawn(self._sock_recv)
         get = gevent.spawn(self._inbox_get)
 
         def _clear(*args):
-            self.master.rem_worker(self)
+            self.master.rem_worker(self.sign)
             get.kill()
         recv.link(_clear)
         gevent.joinall([recv, get])

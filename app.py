@@ -23,6 +23,8 @@ class ChatMaster(Master):
 
     def rem_worker(self, uid):
         print 'rem_worker'
+        print self.workers
+        print uid
         del self.workers[uid]
 
     def _run(self):
@@ -43,6 +45,14 @@ class ChatMaster(Master):
 
 
 class ChatWorker(MyWorker):
+    def __init__(self, *args, **kwargs):
+        super(ChatWorker, self).__init__(*args, **kwargs)
+        self.uid = None
+
+    @property
+    def sign(self):
+        return self.uid
+
     def sock_recv(self):
         data = super(ChatWorker, self).sock_recv()
         if self.first_receive:
@@ -50,6 +60,7 @@ class ChatWorker(MyWorker):
             msg.ParseFromString(data)
             # 验证playersession
             self.master.add_worker(msg.uid, self)
+            self.uid = msg.uid
 
             x = ChatInitializeResponse()
             x.ret = 0
