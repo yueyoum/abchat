@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from gevent.monkey import patch_all
+patch_all()
 
 import os
 import sys
@@ -11,7 +13,7 @@ sys.path.append(MSG_PATH)
 import redis
 from gevent.server import StreamServer
 
-from base import Master, StreamWorker, WorkersContainerDictType
+from base import Master, StreamWorker, WorkersContainerDictType, MasterInterfaceRedis
 from chat2_pb2 import ChatMsg, ChatInitializeResponse
 from player_session_pb2 import PlayerSession
 
@@ -77,10 +79,20 @@ class ChatWorker(StreamWorker):
         return data
 
     def _clear(self, *args):
-        self.master.workers.rem(self.uid)
+        # 可能在 解 PlayerSession的时候就报错了，这样self就没有uid
+        uid = getattr(self, 'uid', None)
+        if uid:
+            self.master.workers.rem(self.uid)
+
+
+
 
 master = ChatMaster(ChatWorker, WorkersContainerDictType)
 master.start()
+
+interface = MasterInterfaceRedis(r, 'chatbc', master)
+interface.start()
+
 print 'start server...'
 s = StreamServer(('0.0.0.0', 5678), master.handle)
 s.serve_forever()

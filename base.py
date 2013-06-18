@@ -96,7 +96,7 @@ class Master(MaiBoxMixIn, gevent.Greenlet):
         for w in self.workers.all_workers():
             w.put(message)
         
-        
+
 class BaseWorker(MaiBoxMixIn, gevent.Greenlet):
     def __init__(self, master, sock):
         self.master = master
@@ -130,7 +130,7 @@ class BaseWorker(MaiBoxMixIn, gevent.Greenlet):
         to add this worker in master's worker containter.
         And, you do this, just in condition of self.first_receive == True
         """
-        raise NotImplemented
+        raise NotImplemented()
 
     def receive(self, message, tp):
         if tp == 'sock':
@@ -160,3 +160,31 @@ class StreamWorker(StreamSocketMixIn, BaseWorker):
 
 class LineWorker(LineSocketMixIn, BaseWorker):
     pass
+
+
+class MasterInterface(gevent.Greenlet):
+    def __init__(self, master):
+        self.master = master
+        gevent.Greenlet.__init__(self)
+
+    def enter(self, *args, **kwargs):
+        raise NotImplemented()
+
+    def _run(self):
+        print 'MasterInterface _run'
+        while True:
+            gevent.sleep(0)
+            data = self.enter()
+            print 'MasterInterface got data'
+            self.master.put(data)
+
+
+class MasterInterfaceRedis(MasterInterface):
+    def __init__(self, r, key, master):
+        self.r = r
+        self.key = key
+        super(MasterInterfaceRedis, self).__init__(master)
+
+    def enter(self):
+        _, data = self.r.blpop(self.key)
+        return data
