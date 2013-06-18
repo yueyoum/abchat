@@ -1,92 +1,85 @@
 # -*- coding: utf-8 -*-
 
-from base import Master, MyWorker
-from gevent.server import StreamServer
+import os
+import sys
 
-from chat2_pb2 import ChatMsg, ChatInitializeResponse
+CURRENT_PATH = os.path.dirname(os.path.realpath(__file__))
+SERVER_PATH = os.path.dirname(CURRENT_PATH)
+MSG_PATH = os.path.join(SERVER_PATH, 'lib', 'msg')
+sys.path.append(MSG_PATH)
 
 import redis
-r = redis.Redis(port=6381)
+from gevent.server import StreamServer
 
-import sys
-sys.path.append("/home/li.yu/mhxj_ios/server/lib/msg")
+from base import Master, StreamWorker, WorkersContainerDictType
+from chat2_pb2 import ChatMsg, ChatInitializeResponse
 from player_session_pb2 import PlayerSession
 
+r = redis.Redis(port=6381)
+
 class ChatMaster(Master):
-    def __init__(self, worker_class):
-        super(ChatMaster, self).__init__(worker_class)
-        self.workers = {}
-
-    def add_worker(self, uid, w):
-        print 'add_worker'
-        self.workers[uid] = w
-
-    def rem_worker(self, uid):
-        print 'rem_worker'
-        print self.workers
-        print uid
-        del self.workers[uid]
-
-    def _run(self):
-        while True:
-            message = self.inbox.get()
-            msg = ChatMsg()
-            msg.ParseFromString(message)
-            # if msg.channel == 1:
-            #     # 私聊
-            #     print 'MASTER, send message to', msg.who.uid
-            #     self.workers[msg.who.uid].put(message)
-            # else:
-            #     print 'MASTER, send message to', 'all'
-            #     for w in self.workers.values():
-            #         w.put(message)
-            for w in self.workers.values():
+    def emit_message(self, message):
+        msg = ChatMsg()
+        msg.ParseFromString(message)
+        if msg.channel == 1:
+            # 私聊
+            print 'MASTER, send message to', msg.to.uid
+            try:
+                remote = self.workers.workers[msg.to.uid]
+            except KeyError:
+                print 'remote has gone away...'
+                return
+            remote.put(message)
+        else:
+            print 'MASTER, send message to', 'all'
+            for w in self.workers.all_workers():
                 w.put(message)
 
 
-class ChatWorker(MyWorker):
-    def __init__(self, *args, **kwargs):
-        super(ChatWorker, self).__init__(*args, **kwargs)
-        self.uid = None
-
-    @property
-    def sign(self):
-        return self.uid
-
+class ChatWorker(StreamWorker):
     def sock_recv(self):
         data = super(ChatWorker, self).sock_recv()
+        if not data:
+            return data
+
         if self.first_receive:
             msg = PlayerSession()
             msg.ParseFromString(data)
             # 验证playersession
-            self.master.add_worker(msg.uid, self)
             self.uid = msg.uid
-
-            x = ChatInitializeResponse()
-            x.ret = 0
-            self.sendall(x.SerializeToString())
-
-
-            data = ChatMsg()
-            data.channel = 0
-            data.who.uid = msg.uid
-            print 'uid =', msg.uid
-            cid = r.get('u.{0}.oc'.format(msg.uid))
+            cid = r.get('u.{0}.oc'.format(self.uid))
             name, gender = r.hmget('c.{0}'.format(cid), 'name', 'gender')
-            data.who.name = name.decode('utf-8')
-            data.who.gender = int(gender)
-            data.text = u'我来了'
-            return data.SerializeToString()
+            self.name = name.decode('utf-8')
+            self.gender = int(gender)
+            self.master.workers.add(msg.uid, self)
+
+            # 取私聊信息
+            msg = ChatInitializeResponse()
+            msg.ret = 0
+            self.sendall(msg.SerializeToString())
+            return
+
+        msg = ChatMsg()
+        msg.ParseFromString(data)
+        msg.who.uid = self.uid
+        msg.who.name = self.name
+        msg.who.gender = self.gender
+
+        data = msg.SerializeToString()
+        if msg.channel == 1:
+            # 私聊，填充to
+            cid = r.get('u.{0}.oc'.format(msg.to.uid))
+            name, gender = r.hmget('c.{0}'.format(cid), 'name', 'gender')
+            msg.to.name = name.decode('utf-8')
+            msg.to.gender = int(gender)
+            self.sendall(msg.SerializeToString())
+
         return data
 
-    def receive(self, message, tp):
-        if tp == 'sock':
-            self.master.put(message)
-        elif tp == 'inbox':
-            self.sendall(message)
+    def _clear(self, *args):
+        self.master.workers.rem(self.uid)
 
-
-master = ChatMaster(ChatWorker)
+master = ChatMaster(ChatWorker, WorkersContainerDictType)
 master.start()
 print 'start server...'
 s = StreamServer(('0.0.0.0', 5678), master.handle)
