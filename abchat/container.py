@@ -10,7 +10,10 @@ class WorkersContainerListType(object):
         self.workers.add(w)
 
     def rem(self, w):
-        self.workers.remove(w)
+        try:
+            self.workers.remove(w)
+        except KeyError:
+            log.error('WorkersContainerListType, rem worker, KeyError, key={0}'.format(w))
 
     def all_workers(self):
         return self.workers
