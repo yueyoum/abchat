@@ -38,7 +38,14 @@ class StreamSocketMixIn(object):
 
 class LineSocketMixIn(object):
     def sendall(self, message):
-        self.wfile.writeline(message)
+        if not message.endswith('\n'):
+            message = '%s\n' % message
+        self.wfile.write(message)
+        self.wfile.flush()
 
     def sock_recv(self):
-        return self.rfile.readline()
+        try:
+            return self.rfile.readline()
+        except Exception as e:
+            log.error('LineSocketMixIn, sock_recv error: {0}'.format(str(e)))
+            return ''
