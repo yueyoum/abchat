@@ -11,6 +11,6 @@ class StreamWorker(StreamSocketMixIn, BaseWorker):
 
 class LineWorker(LineSocketMixIn, BaseWorker):
     def __init__(self, *args, **kwargs):
+        BaseWorker.__init__(self, *args, **kwargs)
         self.rfile = self.sock.makefile('rb')
         self.wfile = self.sock.makefile('wb')
-        BaseWorker.__init__(self, *args, **kwargs)
