@@ -124,7 +124,7 @@ class ChatWorker(StreamWorker):
 
         return data
 
-    def _clear(self, *args):
+    def clear_worker(self, *args):
         # 可能在 解 PlayerSession的时候就报错了，这样self就没有uid
         uid = getattr(self, 'uid', None)
         if uid:
