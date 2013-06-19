@@ -78,9 +78,17 @@ class BaseWorker(MailBoxMixIn, gevent.Greenlet):
         if tp == 'sock':
             self.master.put(message)
         elif tp == 'inbox':
-            self.sendall(message)
+            try:
+                self.sendall(message)
+            except Exception as e:
+                log.error("worker sendall error: {0}".format(str(e)))
+                this = gevent.getcurrent()
+                this.kill()
+        else:
+            log.error("worker receive, unknown tp: {0}".format(tp))
 
-    def _clear(self, *args):
+
+    def clear_worker(self, *args):
         pass
 
     def _run(self):
@@ -88,8 +96,10 @@ class BaseWorker(MailBoxMixIn, gevent.Greenlet):
         get = gevent.spawn(self._inbox_get)
 
         def _clear(*args):
-            self._clear(*args)
-            get.kill()
+            self.clear_worker(*args)
+            gevent.killall([recv, get])
+
         recv.link(_clear)
+        get.link(_clear)
         gevent.joinall([recv, get])
         log.debug('{0} worker died'.format(self.address))
