@@ -3,6 +3,8 @@
 import struct
 from gevent.queue import Queue
 
+from .log import log
+
 class MailBoxMixIn(object):
     def __init__(self):
         self.inbox = Queue()
@@ -20,7 +22,6 @@ class StreamSocketMixIn(object):
         msg_st = struct.Struct('>i%ds' % msg_len)
         x = msg_st.pack(msg_len, message)
         self.sock.sendall(x)
-        print 'sendall done'
 
     def sock_recv(self):
         try:
@@ -31,7 +32,7 @@ class StreamSocketMixIn(object):
             length = length[0]
             data = self.sock.recv(length)
         except Exception as e:
-            print e
+            log.error('StreamSocketMixIn, sock_recv error: {0}'.format(str(e)))
             return None
         return data
 

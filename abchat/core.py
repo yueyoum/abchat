@@ -3,6 +3,7 @@ import gevent
 
 from .mixins import MailBoxMixIn
 from .container import WorkersContainerListType
+from .log import log
 
 class InvalidData(object):pass
 
@@ -13,9 +14,15 @@ class Master(MailBoxMixIn, gevent.Greenlet):
         self.worker_class = worker_class
         MailBoxMixIn.__init__(self)
         gevent.Greenlet.__init__(self)
+        gevent.spawn_later(1, self.dump_master_status)
+
+    def dump_master_status(self):
+        while True:
+            log.debug('workers amount: {0}'.format(self.workers.amount()))
+            gevent.sleep(60)
 
     def handle(self, remote, address):
-        self.worker_class(self, remote).start()
+        self.worker_class(self, remote, address).start()
 
     def _run(self):
         while True:
@@ -29,15 +36,14 @@ class Master(MailBoxMixIn, gevent.Greenlet):
         
 
 class BaseWorker(MailBoxMixIn, gevent.Greenlet):
-    def __init__(self, master, sock):
+    def __init__(self, master, sock, address):
         self.master = master
         self.sock = sock
-        self.rfile = self.sock.makefile('rb')
-        self.wfile = self.sock.makefile('wb')
+        self.address = address
         MailBoxMixIn.__init__(self)
         gevent.Greenlet.__init__(self)
         self.first_receive = True
-        print 'new worker'
+        log.debug('{0} new worker'.format(self.address))
 
     def _sock_recv(self):
         while True:
@@ -48,10 +54,10 @@ class BaseWorker(MailBoxMixIn, gevent.Greenlet):
                 continue
 
             if data is InvalidData:
+                log.warning('{0} got Invalid data'.format(self.address))
                 continue
 
             if not data:
-                print 'connection lost'
                 break
             self.receive(data, 'sock')
 
@@ -86,4 +92,4 @@ class BaseWorker(MailBoxMixIn, gevent.Greenlet):
             get.kill()
         recv.link(_clear)
         gevent.joinall([recv, get])
-        print 'worker died...'
+        log.debug('{0} worker died'.format(self.address))

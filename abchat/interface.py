@@ -17,11 +17,11 @@ class MasterInterface(gevent.Greenlet):
 
 
 class MasterInterfaceRedis(MasterInterface):
-    def __init__(self, r, key, master):
-        self.r = r
+    def __init__(self, redis_client, key, master):
+        self.redis_client = redis_client
         self.key = key
         super(MasterInterfaceRedis, self).__init__(master)
 
     def enter(self):
-        _, data = self.r.blpop(self.key)
+        _, data = self.redis_client.blpop(self.key)
         return data
