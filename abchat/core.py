@@ -1,17 +1,30 @@
 # -*- coding: utf-8 -*-
 import gevent
+from gevent.pool import Pool
 
 from .mixins import MailBoxMixIn
 from .container import WorkersContainerListType
 from .log import log
 
+
+# message type
+MSG_TO_MASTER = 1
+MSG_TO_CLIENT = 2
+
+
 class InvalidData(object):pass
 
 
 class Master(MailBoxMixIn, gevent.Greenlet):
-    def __init__(self, worker_class, worker_container_type=WorkersContainerListType):
+    def __init__(self, worker_class,
+        worker_container_type=WorkersContainerListType,
+        broadcast_backlog=100,
+        dump_status_interval=60):
         self.workers = worker_container_type()
         self.worker_class = worker_class
+        self.broadcast_backlog = broadcast_backlog
+        self.dump_status_interval = dump_status_interval
+
         MailBoxMixIn.__init__(self)
         gevent.Greenlet.__init__(self)
         gevent.spawn_later(1, self.dump_master_status)
@@ -19,7 +32,7 @@ class Master(MailBoxMixIn, gevent.Greenlet):
     def dump_master_status(self):
         while True:
             log.debug('workers amount: {0}'.format(self.workers.amount()))
-            gevent.sleep(60)
+            gevent.sleep(self.dump_status_interval)
 
     def handle(self, remote, address):
         self.worker_class(self, remote, address).start()
@@ -28,11 +41,20 @@ class Master(MailBoxMixIn, gevent.Greenlet):
         while True:
             gevent.sleep(0)
             message = self.inbox.get()
-            self.emit_message(message)
+            gevent.spawn(self.emit_message, message)
 
     def emit_message(self, message):
-        for w in self.workers.all_workers():
-            w.put(message)
+        self.broadcast_message(message)
+
+    def broadcast_message(self, message):
+        pool = Pool(self.broadcast_backlog)
+        pool.map_async(
+            lambda w: self._worker_broadcast(w, message),
+            self.workers.all_workers()
+        ).start()
+
+    def _worker_broadcast(self, w, message):
+        w.receive(message, MSG_TO_CLIENT)
         
 
 class BaseWorker(MailBoxMixIn, gevent.Greenlet):
@@ -59,13 +81,13 @@ class BaseWorker(MailBoxMixIn, gevent.Greenlet):
 
             if not data:
                 break
-            self.receive(data, 'sock')
+            self.receive(data, MSG_TO_MASTER)
 
     def _inbox_get(self):
         while True:
             gevent.sleep(0)
             data = self.inbox.get()
-            self.receive(data, 'inbox')
+            self.receive(data, MSG_TO_CLIENT)
 
     def sock_recv(self):
         """In the method, you should call self.master.workers.add()
@@ -75,9 +97,9 @@ class BaseWorker(MailBoxMixIn, gevent.Greenlet):
         raise NotImplemented()
 
     def receive(self, message, tp):
-        if tp == 'sock':
+        if tp == MSG_TO_MASTER:
             self.master.put(message)
-        elif tp == 'inbox':
+        elif tp == MSG_TO_CLIENT:
             try:
                 self.sendall(message)
             except Exception as e:
@@ -88,22 +110,20 @@ class BaseWorker(MailBoxMixIn, gevent.Greenlet):
             log.error("worker receive, unknown tp: {0}".format(tp))
 
 
-    def clear_worker(self, *args):
-        pass
+    def before_worker_exit(self):
+        raise NotImplemented()
+
 
     def _run(self):
         recv = gevent.spawn(self._sock_recv)
         get = gevent.spawn(self._inbox_get)
 
-        self._has_clear_worker = False
         def _clear(glet):
             glet.unlink(_clear)
-            if not self._has_clear_worker:
-                self._has_clear_worker = True
-                self.clear_worker(glet)
             gevent.killall([recv, get])
 
         recv.link(_clear)
         get.link(_clear)
         gevent.joinall([recv, get])
+        self.before_worker_exit()
         log.debug('{0} worker died'.format(self.address))
