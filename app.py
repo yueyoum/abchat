@@ -14,7 +14,6 @@ from gevent.server import StreamServer
 from abchat import Master, StreamWorker, InvalidData
 from abchat.container import WorkersContainerDictType
 from abchat.interface import MasterInterfaceRedis
-from abchat.log import log
 
 from chat2_pb2 import ChatMsg, ChatInitializeResponse
 
@@ -39,6 +38,7 @@ xml = """<?xml version="1.0"?>
   <allow-access-from domain="*" to-ports="*"/>
 </cross-domain-policy>\0"""
 
+log = logging.getLogger('abchat')
 handle = logging.StreamHandler()
 handle.setLevel(logging.NOTSET)
 handle.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
@@ -60,9 +60,9 @@ class ChatMaster(Master):
                 return
             remote.put(message)
         else:
+            # 世界频道
             log.debug("Send message to all")
-            for w in self.workers.all_workers():
-                w.put(message)
+            self.broadcast_message(message)
 
 
 class ChatWorker(StreamWorker):
@@ -124,7 +124,7 @@ class ChatWorker(StreamWorker):
 
         return data
 
-    def clear_worker(self, *args):
+    def before_worker_exit(self):
         # 可能在 解 PlayerSession的时候就报错了，这样self就没有uid
         uid = getattr(self, 'uid', None)
         if uid:

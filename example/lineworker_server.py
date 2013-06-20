@@ -14,7 +14,7 @@ class MyWorker(LineWorker):
                 self.first_receive = False
         return data
 
-    def clear_worker(self, *args):
+    def before_worker_exit(self, *args):
         self.master.workers.rem(self)
 
 master = Master(MyWorker)
