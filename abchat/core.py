@@ -95,8 +95,12 @@ class BaseWorker(MailBoxMixIn, gevent.Greenlet):
         recv = gevent.spawn(self._sock_recv)
         get = gevent.spawn(self._inbox_get)
 
-        def _clear(*args):
-            self.clear_worker(*args)
+        self._has_clear_worker = False
+        def _clear(glet):
+            glet.unlink(_clear)
+            if not self._has_clear_worker:
+                self._has_clear_worker = True
+                self.clear_worker(glet)
             gevent.killall([recv, get])
 
         recv.link(_clear)
