@@ -16,6 +16,8 @@ class InvalidData(object):pass
 
 
 class Master(MailBoxMixIn, gevent.Greenlet):
+    worker_kwargs = {}
+
     def __init__(self, worker_class,
         worker_container_type=WorkersContainerListType,
         broadcast_backlog=100,
@@ -29,13 +31,18 @@ class Master(MailBoxMixIn, gevent.Greenlet):
         gevent.Greenlet.__init__(self)
         gevent.spawn_later(1, self.dump_master_status)
 
+
+    @classmethod
+    def set_worker_kwargs(cls, **kwargs):
+        cls.worker_kwargs = kwargs
+
     def dump_master_status(self):
         while True:
             log.debug('workers amount: {0}'.format(self.workers.amount()))
             gevent.sleep(self.dump_status_interval)
 
     def handle(self, remote, address):
-        self.worker_class(self, remote, address).start()
+        self.worker_class(self, remote, address, **self.worker_kwargs).start()
 
     def _run(self):
         while True:
