@@ -17,6 +17,7 @@ class MyWorker(StreamWorker):
     def before_worker_exit(self, *args):
         self.master.workers.rem(self)
 
+Master.set_worker_kwargs(pre_malloc_size=1024)
 master = Master(MyWorker)
 master.start()
 
