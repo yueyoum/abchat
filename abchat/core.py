@@ -83,7 +83,6 @@ class BaseWorker(MailBoxMixIn, gevent.Greenlet):
                 continue
 
             if data is ContinueFlag:
-                log.warning('{0} got ContinueFlag'.format(self.address))
                 continue
 
             if not data:
