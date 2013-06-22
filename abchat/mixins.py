@@ -39,7 +39,6 @@ class StreamSocketMixIn(object):
         else:
             x = msg_st.pack(msg_len, message)
 
-        x = msg_st.pack(msg_len, message)
         self.sock.sendall(x)
 
     def sock_recv(self):

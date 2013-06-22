@@ -20,7 +20,7 @@ class Master(MailBoxMixIn, gevent.Greenlet):
 
     def __init__(self, worker_class,
         worker_container_type=WorkersContainerListType,
-        broadcast_backlog=100,
+        broadcast_backlog=50,
         dump_status_interval=60):
         self.workers = worker_container_type()
         self.worker_class = worker_class
