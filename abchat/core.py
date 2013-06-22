@@ -12,7 +12,7 @@ MSG_TO_MASTER = 1
 MSG_TO_CLIENT = 2
 
 
-class InvalidData(object):pass
+class ContinueFlag(object):pass
 
 
 class Master(MailBoxMixIn, gevent.Greenlet):
@@ -82,8 +82,8 @@ class BaseWorker(MailBoxMixIn, gevent.Greenlet):
                 self.first_receive = False
                 continue
 
-            if data is InvalidData:
-                log.warning('{0} got Invalid data'.format(self.address))
+            if data is ContinueFlag:
+                log.warning('{0} got ContinueFlag'.format(self.address))
                 continue
 
             if not data:

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from .mixins import StreamSocketMixIn, LineSocketMixIn
-from .core import Master, BaseWorker, InvalidData
+from .core import Master, BaseWorker, ContinueFlag
 
 class StreamWorker(StreamSocketMixIn, BaseWorker):
     def __init__(self, *args, **kwargs):
