@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import time
+
 import gevent
 from gevent.pool import Pool
 
@@ -16,12 +18,46 @@ class ContinueFlag(object):pass
 
 
 class Master(MailBoxMixIn, gevent.Greenlet):
-    worker_kwargs = {}
+    worker_kwargs = {'client_send_interval': None}
 
     def __init__(self, worker_class,
         worker_container_type=WorkersContainerListType,
         broadcast_backlog=50,
         dump_status_interval=60):
+        """Master Contains All Connected Clients,
+        And as a rount, to distribute messages from clients.
+
+        Usage:
+            master = Master(WorkerClass, WorkerContainerType, **kwargs)
+            master.start()
+            s = StreamServer(ADDRESS_TUPLE, master.handle)
+            s.serve_forever()
+
+        Two build-in WorkerClasses:
+            abchat.LineWorker - For '\n' ending line based messages
+            abchat.StreamWorker - For streaming message
+
+            streaming message means NO delimiter to split message.
+            so, the message scheme like below:
+                +-------------+-------------+-------------+-------------+
+                | 4 bytes int | binary data | 4 bytes int | binary data | ...
+                +-------------+-------------+-------------+-------------+
+            The value of 4 bytes int represent the binary data length after
+            the 4 bytes.
+
+            First, read 4 bytes from socket, and got it's value,
+            Then, read the value length.
+            And go on this loop, We can split message correctly
+
+        Two build-in WorkerContainerType:
+            abchat.container.WorkersContainerListType
+                - keep all clients as list.
+                  this type can only broadcast message to all connected clients
+
+            abchat.containter.WorkersContainerDictType
+                - keep all clients as dict,
+                  this type can also send private message
+        """
         self.workers = worker_container_type()
         self.worker_class = worker_class
         self.broadcast_backlog = broadcast_backlog
@@ -34,7 +70,7 @@ class Master(MailBoxMixIn, gevent.Greenlet):
 
     @classmethod
     def set_worker_kwargs(cls, **kwargs):
-        cls.worker_kwargs = kwargs
+        cls.worker_kwargs.update(kwargs)
 
     def dump_master_status(self):
         while True:
@@ -65,10 +101,14 @@ class Master(MailBoxMixIn, gevent.Greenlet):
         
 
 class BaseWorker(MailBoxMixIn, gevent.Greenlet):
-    def __init__(self, master, sock, address):
+    def __init__(self, master, sock, address, client_send_interval=None):
+        """Can't Use BaseWorker directly,
+        you can find the real worker at abchat/__init__.py
+        """
         self.master = master
         self.sock = sock
         self.address = address
+        self.client_send_interval = client_send_interval
         MailBoxMixIn.__init__(self)
         gevent.Greenlet.__init__(self)
         self.first_receive = True
@@ -95,8 +135,20 @@ class BaseWorker(MailBoxMixIn, gevent.Greenlet):
             data = self.inbox.get()
             self.receive(data, MSG_TO_CLIENT)
 
+    def check_interval(self, interval=None):
+        interval = interval or self.client_send_interval
+        if not interval:
+            return None
+
+        timestamp = getattr(self, 'timestamp', None)
+        self.timestamp = time.time()
+        if timestamp:
+            if self.timestamp - timestamp < self.client_send_interval:
+                return ContinueFlag
+
+
     def sock_recv(self):
-        """In the method, you should call self.master.workers.add()
+        """In the method, you should call self.master.workers.add(*args)
         to add this worker in master's worker containter.
         And, you do this, just in condition of self.first_receive == True
         """
@@ -117,6 +169,7 @@ class BaseWorker(MailBoxMixIn, gevent.Greenlet):
 
 
     def before_worker_exit(self):
+        """In the method, you should call self.master.workers.rem(*args)"""
         raise NotImplemented()
 
 
