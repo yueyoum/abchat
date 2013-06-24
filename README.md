@@ -10,15 +10,16 @@ Abstract Chat Server Based on Gevent
 
 
 run test server and test client at the same machine,
-server can handler 1,000 connected clients send message to each other every second.
+server can handler 1,000 connected clients,
+this clients send message to each other every second.
 
 which means, every second, server receive 1,000 messages, and send every message to 1,000 clients.
 
 ## TODO
 
-1.  Master/Silver struct, to be a scalable, distributed system
+1.  Master/Slave struct, to be a scalable, distributed system
 
-    Silver not only mulitprocessings, but also can running at other computes
+    Slave not only mulitprocessings, but also can running at other computes
 
 2.  Message Filter.
 
@@ -27,7 +28,6 @@ which means, every second, server receive 1,000 messages, and send every message
 3.  Client Group
 
     Now, `abchat` only support two mode:
-
     *   public message, send to all clients
     *   private message, only send to the target client
 
@@ -104,7 +104,7 @@ class MyWorker(StreamWorker):
 
 def start():
     MyMaster.set_worker_kwargs(pre_malloc_size=1024, client_send_interval=10)
-    # pre_malloc_size: is not None, each worker will malloc some memory,
+    # pre_malloc_size: if not None, each worker will malloc some memory when initialize,
     # used for struct.pack_into method, this can avoid malloc memory in each sendall call.
     # default is None
 
