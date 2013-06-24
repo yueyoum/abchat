@@ -6,7 +6,6 @@ gevent.monkey.patch_all()
 
 import os
 import sys
-import time
 import logging
 from logging import handlers
 import daemonized
@@ -34,7 +33,6 @@ import rediskey
 
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT)
 
-
 xml = """<?xml version="1.0"?>
 <!DOCTYPE cross-domain-policy SYSTEM "http://www.adobe.com/xml/dtds/cross-domain-policy.dtd">
 <cross-domain-policy>
@@ -42,9 +40,14 @@ xml = """<?xml version="1.0"?>
   <allow-access-from domain="*" to-ports="*"/>
 </cross-domain-policy>\0"""
 
+DEBUG = len(sys.argv) > 1 and sys.argv[1].lower() == 'debug'
+
+
 log = logging.getLogger('abchat')
-# handle = logging.StreamHandler()
-handle = handlers.TimedRotatingFileHandler(os.path.join(TMP_PATH, 'chat.log'), when='W6')
+if DEBUG:
+    handle = logging.StreamHandler()
+else:
+    handle = handlers.TimedRotatingFileHandler(os.path.join(TMP_PATH, 'chat.log'), when='W6')
 handle.setLevel(logging.DEBUG)
 handle.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
 log.addHandler(handle)
@@ -148,12 +151,11 @@ class ChatWorker(StreamWorker):
             self.sendall(msg.SerializeToString())
         else:
             # 世界频道，限制发送速度
-            timestamp = getattr(self, 'timestamp', None)
-            self.timestamp = time.time()
-            if timestamp:
-                if self.timestamp - timestamp < 3:
-                    log.debug('{0} {1} speak too fast, ignore'.format(self.address, msg.who.uid))
-                    return ContinueFlag
+            interval_result = self.check_interval()
+            if interval_result is ContinueFlag:
+                log.debug('{0} {1} speak too fast, ignore'.format(self.address, msg.who.uid))
+                return ContinueFlag
+
             log.debug("{0} from {1}, to all: {2}".format(self.address, msg.who.uid, msg.text.encode('utf-8')))
 
         return data
@@ -166,7 +168,7 @@ class ChatWorker(StreamWorker):
 
 
 def start_server(port=5678):
-    ChatMaster.set_worker_kwargs(pre_malloc_size=1024)
+    ChatMaster.set_worker_kwargs(pre_malloc_size=1024, client_send_interval=3)
     master = ChatMaster(ChatWorker, WorkersContainerDictType, dump_status_interval=600)
     master.start()
 
@@ -182,4 +184,7 @@ if __name__ == '__main__':
     def daemon_server():
         start_server(port=CHAT_PORT)
 
-    daemon_server()
+    if DEBUG:
+        start_server(port=CHAT_PORT)
+    else:
+        daemon_server()
