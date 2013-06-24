@@ -14,8 +14,27 @@ server can handler 1,000 connected clients send message to each other every seco
 
 which means, every second, server receive 1,000 messages, and send every message to 1,000 clients.
 
+## TODO
 
-# GuideLine
+1.  Master/Silver struct, to be a scalable, distributed system
+
+    Silver not only mulitprocessings, but also can running at other computes
+
+2.  Message Filter.
+
+    A commont Filter to Forbid some words/messages.
+
+3.  Client Group
+
+    Now, `abchat` only support two mode:
+
+    *   public message, send to all clients
+    *   private message, only send to the target client
+
+    Client Groups means, you can send message to a set specified clients which are in a group
+    
+
+## GuideLine
 
 ```python
 # if using some block library
@@ -28,13 +47,11 @@ from gevent.server import StreamServer
 from abchat import Master, StreamWorker, ContinueFlag
 form abchat.container import WorkersContainerDictType
 
-
 class MyMaster(Master):
     def emit_message(self, message):
         """When any clients receive message,
         This method will be called in a spawned greenlet
         """
-
         # parse your message, and handle it like this:
         if private message:
             try:
@@ -44,7 +61,6 @@ class MyMaster(Master):
             remote.put(message)
         else broadcase message to all clients:
             self.broadcase_message(message)
-
 
 class MyWorker(StreamWorker):
     def sock_recv(self):
@@ -84,7 +100,6 @@ class MyWorker(StreamWorker):
         self.master.wokers.rem(SIGN)
 
         # some addtional jobs...
-
 
 
 def start():
